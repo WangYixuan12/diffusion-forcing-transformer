@@ -35,6 +35,11 @@ class RealEstate10KBaseVideoDataset(BaseVideoDataset):
     """
     RealEstate10K base video dataset.
     The dataset will be preprocessed to `_SUPPORTED_RESOLUTIONS` in the format of `_SUPPORTED_RESOLUTIONS[resolution]` during the download.
+
+    NOTE: The camera intrinsics for poses are not fully accurate, as we have not renormalized them after rescaling and center-cropping.
+    - We keep this behavior to maintain compatibility with existing code and checkpoints.
+    - The impact is expected to be minimal: YouTube videos typically have similar aspect ratios, and the dataset is not metric-scale.
+    - However, we recommend properly renormalizing the intrinsics when training a new model with this codebase.
     """
 
     _ALL_SPLITS = ["training", "test"]
