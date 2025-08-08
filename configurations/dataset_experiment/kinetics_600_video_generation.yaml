@@ -10,7 +10,7 @@ defaults:
 
 dataset:
   num_eval_videos: 6144
-  subdataset_size: 3840000
+  subdataset_size: null
   latent:
     enable: True
 

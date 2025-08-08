@@ -25,6 +25,7 @@ class ResumableDataModule(BaseDataModule):
                 or self.root_cfg.experiment.validation.val_every_n_step == 1.0
             )  # this ensures that ckpts are saved not before validation (otherwise,it may lead to redundant ckpts & validation if resuming)
         )
+        is_experiment_resumable = False
         is_dataset_resumable = self.root_cfg.dataset.subdataset_size is not None
         if is_experiment_resumable != is_dataset_resumable:
             raise ValueError(

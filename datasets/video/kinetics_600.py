@@ -61,7 +61,7 @@ def _preprocess_video(
             )
         elif preprocessing_type == "mp4":
             write_video(
-                filename=video_path,
+                filename=str(video_path),
                 video_array=torch.from_numpy(video).clone(),
                 fps=VideoPreprocessingMp4FPS,
             )
@@ -204,14 +204,16 @@ class Kinetics600BaseVideoDataset(BaseVideoDataset):
             resolution=self.resolution,
             preprocessing_type=self.cfg.video_preprocessing,
         )
-        with Pool(32) as pool:
-            list(
-                tqdm(
-                    pool.imap(preprocess_fn, video_paths),
-                    total=len(video_paths),
-                    desc=f"Preprocessing {split} videos",
-                )
-            )
+        # with Pool(32) as pool:
+        #     list(
+        #         tqdm(
+        #             pool.imap(preprocess_fn, video_paths),
+        #             total=len(video_paths),
+        #             desc=f"Preprocessing {split} videos",
+        #         )
+        #     )
+        for video_path in tqdm(video_paths, desc=f"Preprocessing {split} videos"):
+            preprocess_fn(video_path)
 
     def exclude_failed_videos(
         self, metadata: List[Dict[str, Any]]
@@ -260,7 +262,7 @@ class Kinetics600BaseVideoDataset(BaseVideoDataset):
                     return torch.from_numpy(video / 255.0).float()
                 case "mp4":
                     video = read_video(
-                        preprocessed_path,
+                        str(preprocessed_path),
                         pts_unit="sec",
                         start_pts=Fraction(start_frame, VideoPreprocessingMp4FPS),
                         end_pts=Fraction(end_frame - 1, VideoPreprocessingMp4FPS),

@@ -9,7 +9,7 @@ defaults:
 debug: false # global debug flag will be passed into configuration of experiment, dataset and algorithm
 
 wandb:
-  entity: null # wandb account name / organization name [fixme]
+  entity: yixuan1999 # wandb account name / organization name [fixme]
   project: dfot # wandb project name; if not provided, defaults to root folder name [fixme]
   mode: online # set wandb logging to online, offline or dryrun
 

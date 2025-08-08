@@ -3,7 +3,7 @@
 
 defaults:
   - base_pytorch_algo
-  - backbone: dit3d
+  - backbone: u_net3d
 
 # dataset-dependent configurations
 x_shape: ${dataset.observation_shape}
