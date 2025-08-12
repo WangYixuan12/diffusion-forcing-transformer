@@ -20,7 +20,6 @@ from utils.distributed_utils import rank_zero_print, is_rank_zero
 from utils.torch_utils import bernoulli_tensor
 from utils.logging_utils import log_video
 from utils.torch_utils import freeze_model
-from datasets.video.utils.normalizer import LinearNormalizer
 from .diffusion import (
     DiscreteDiffusion,
     ContinuousDiffusion,
@@ -79,12 +78,8 @@ class DFoTVideo(BasePytorchAlgo):
         ]
         self.num_logged_videos = 0
         self.generator = None
-        
-        # 5. Extra
-        self.obs_keys = cfg.obs_keys
 
         super().__init__(cfg)
-        self.normalizer = LinearNormalizer()
 
     # ---------------------------------------------------------------------
     # Prepare Model, Optimizer, and Metrics
@@ -153,10 +148,6 @@ class DFoTVideo(BasePytorchAlgo):
                         split_batch_size=self.logging.metrics_batch_size,
                     )
 
-    def set_normalizer(self, normalizer: LinearNormalizer) -> None:
-        """Set the normalizer for the model"""
-        self.normalizer.load_state_dict(normalizer.state_dict())
-        
     def configure_optimizers(self):
         transition_params = list(self.diffusion_model.parameters())
         optimizer_dynamics = torch.optim.AdamW(
@@ -267,26 +258,30 @@ class DFoTVideo(BasePytorchAlgo):
     def on_after_batch_transfer(
         self, batch: Dict, dataloader_idx: int
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Optional[Tensor]]:
-        """Preprocess the batch before training/validation.
+        """
+        Preprocess the batch before training/validation.
 
         Args:
-            batch (Dict): The batch of data. Contains "videos" or "latents", (optional)
-            "conditions", and "masks".
+            batch (Dict): The batch of data. Contains "videos" or "latents", (optional) "conditions", and "masks".
             dataloader_idx (int): The index of the dataloader.
         Returns:
             xs (Tensor, "B n_tokens *x_shape"): Tokens to be processed by the model.
-            conditions (Optional[Tensor], "B n_tokens d"): External conditions for the
-            tokens.
+            conditions (Optional[Tensor], "B n_tokens d"): External conditions for the tokens.
             masks (Tensor, "B n_tokens"): Masks for the tokens.
-            gt_videos (Optional[Tensor], "B n_frames *x_shape"): Optional ground truth
-            videos, used for validation in latent diffusion.
+            gt_videos (Optional[Tensor], "B n_frames *x_shape"): Optional ground truth videos, used for validation in latent diffusion.
         """
         # 1. Tokenize the videos and optionally prepare the ground truth videos
         gt_videos = None
-        xs = torch.cat([batch["obs"][k] for k in self.obs_keys], dim=2)
-        
         if self.is_latent_diffusion:
-            xs = self._encode(xs)
+            xs = (
+                self._encode(batch["videos"])
+                if self.is_latent_online
+                else batch["latents"]
+            )
+            if "videos" in batch:
+                gt_videos = batch["videos"]
+        else:
+            xs = batch["videos"]
         xs = self._normalize_x(xs)
 
         # 2. Prepare external conditions
@@ -1389,26 +1384,18 @@ class DFoTVideo(BasePytorchAlgo):
             * 0.5
             + 0.5,
         )
-    
-    def _normalize_x(self, xs: Tensor) -> Tensor:
-        """Normalize the tensor"""
-        xs_ls = []
-        for c_i in range(len(self.obs_keys)):
-            curr_xs = xs[:, :, 3 * c_i : 3 * c_i + 3]
-            curr_obs_key = self.obs_keys[c_i]
-            xs_ls.append(self.normalizer[curr_obs_key].normalize(curr_xs))
-        xs = torch.cat(xs_ls, dim=1)  # (T, B * V, 3, H, W)
-        return xs
 
-    def _unnormalize_x(self, x: Tensor) -> Tensor:
-        """Unnormalize the tensor"""
-        xs_ls = []
-        for c_i in range(len(self.obs_keys)):
-            curr_xs = x[:, :, 3 * c_i : 3 * c_i + 3]
-            curr_obs_key = self.obs_keys[c_i]
-            xs_ls.append(self.normalizer[curr_obs_key].unnormalize(curr_xs))
-        xs = torch.cat(xs_ls, dim=1)  # (T, B * V, 3, H, W)
-        return xs
+    def _normalize_x(self, xs):
+        shape = [1] * (xs.ndim - self.data_mean.ndim) + list(self.data_mean.shape)
+        mean = self.data_mean.reshape(shape)
+        std = self.data_std.reshape(shape)
+        return (xs - mean) / std
+
+    def _unnormalize_x(self, xs):
+        shape = [1] * (xs.ndim - self.data_mean.ndim) + list(self.data_mean.shape)
+        mean = self.data_mean.reshape(shape)
+        std = self.data_std.reshape(shape)
+        return xs * std + mean
 
     # ---------------------------------------------------------------------
     # Checkpoint Utils
